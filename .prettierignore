@@ -1,0 +1,8 @@
+node_modules
+dist
+build
+coverage
+.vercel
+drizzle
+*.log
+package-lock.json
