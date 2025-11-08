@@ -1,7 +1,4 @@
 import { betterAuth } from "better-auth";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { db } from "../db";
-import * as schema from "../db/schema";
 import nodemailer from "nodemailer";
 
 // Email transporter setup
@@ -19,14 +16,10 @@ const createEmailTransporter = () => {
 
 // Better Auth configuration
 export const auth = betterAuth({
-  database: drizzleAdapter(db, {
+  database: {
     provider: "pg",
-    schema: {
-      user: schema.users,
-      session: schema.sessions,
-      verification: schema.verificationTokens,
-    },
-  }),
+    url: process.env.DATABASE_URL!,
+  },
   
   emailAndPassword: {
     enabled: true,
