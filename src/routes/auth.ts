@@ -115,18 +115,21 @@ app.post('/signup', zValidator('json', signupSchema), async (c) => {
     })
     
     // Set cookies
+    // Use 'None' for cross-domain in production, 'Lax' for same-domain in dev
+    const isProduction = process.env.NODE_ENV === 'production'
+    
     setCookie(c, 'accessToken', accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Lax',
+      secure: isProduction,
+      sameSite: isProduction ? 'None' : 'Lax',
       maxAge: 15 * 60, // 15 minutes
       path: '/',
     })
     
     setCookie(c, 'refreshToken', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Lax',
+      secure: isProduction,
+      sameSite: isProduction ? 'None' : 'Lax',
       maxAge: 7 * 24 * 60 * 60, // 7 days
       path: '/',
     })
@@ -228,18 +231,20 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
     await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id))
     
     // Set cookies
+    const isProduction = process.env.NODE_ENV === 'production'
+    
     setCookie(c, 'accessToken', accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Lax',
+      secure: isProduction,
+      sameSite: isProduction ? 'None' : 'Lax',
       maxAge: 15 * 60,
       path: '/',
     })
     
     setCookie(c, 'refreshToken', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Lax',
+      secure: isProduction,
+      sameSite: isProduction ? 'None' : 'Lax',
       maxAge: 7 * 24 * 60 * 60,
       path: '/',
     })
@@ -416,10 +421,12 @@ app.post('/refresh', async (c) => {
     })
     
     // Set new access token cookie
+    const isProduction = process.env.NODE_ENV === 'production'
+    
     setCookie(c, 'accessToken', newAccessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Lax',
+      secure: isProduction,
+      sameSite: isProduction ? 'None' : 'Lax',
       maxAge: 15 * 60,
       path: '/',
     })
