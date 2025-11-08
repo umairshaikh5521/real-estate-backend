@@ -6,9 +6,18 @@ export interface AppContext extends Context {
     user?: {
       id: string;
       email: string;
-      role: string;
+      role: UserRole;
+      emailVerified: boolean;
     };
   };
+}
+
+// User roles enum
+export enum UserRole {
+  ADMIN = "admin",
+  BUILDER = "builder",
+  CHANNEL_PARTNER = "channel_partner",
+  CUSTOMER = "customer",
 }
 
 // Common status enums
@@ -40,10 +49,4 @@ export enum UnitStatus {
   AVAILABLE = "available",
   BOOKED = "booked",
   SOLD = "sold",
-}
-
-export enum UserRole {
-  ADMIN = "admin",
-  MANAGER = "manager",
-  AGENT = "agent",
 }

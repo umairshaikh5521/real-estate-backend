@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import authRouter from "./auth";
 import leadsRouter from "./leads";
 import projectsRouter from "./projects";
 
@@ -16,7 +17,10 @@ app.get("/health", (c) => {
   });
 });
 
-// Mount route modules
+// Mount auth routes
+app.route("/auth", authRouter);
+
+// Mount route modules (these will need authentication)
 app.route("/leads", leadsRouter);
 app.route("/projects", projectsRouter);
 

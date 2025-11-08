@@ -1,70 +1,69 @@
-import { Hono } from "hono";
-import { serve } from "@hono/node-server";
-import * as dotenv from "dotenv";
-import { corsMiddleware } from "./middleware/cors";
-import { loggerMiddleware } from "./middleware/logger";
-import { errorHandler } from "./middleware/error-handler";
-import routes from "./routes";
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { logger } from 'hono/logger'
 
-// Load environment variables
-dotenv.config();
+const app = new Hono()
 
-// Create Hono app
-const app = new Hono();
-
-// Global middleware
-app.use("*", corsMiddleware);
-app.use("*", loggerMiddleware);
+// Middleware
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000']
+app.use('*', cors({
+  origin: allowedOrigins,
+  credentials: true,
+}))
+app.use('*', logger())
 
 // Root endpoint
-app.get("/", (c) => {
+app.get('/', (c) => {
   return c.json({
     success: true,
     data: {
-      message: "Real Estate CRM/ERP API",
-      version: "1.0.0",
-      environment: process.env.NODE_ENV || "development",
+      message: 'Real Estate CRM/ERP API',
+      version: '1.0.0',
+      environment: process.env.NODE_ENV || 'production',
       endpoints: {
-        health: "/api/health",
-        leads: "/api/leads",
-        projects: "/api/projects",
-        bookings: "/api/bookings (coming soon)",
-        agents: "/api/agents (coming soon)",
-        units: "/api/units (coming soon)",
-      },
-    },
-  });
-});
+        health: '/api/health',
+        leads: '/api/leads (coming soon)',
+        projects: '/api/projects (coming soon)',
+      }
+    }
+  })
+})
 
-// Mount API routes
-app.route("/api", routes);
+// Health check
+app.get('/api/health', (c) => {
+  return c.json({
+    success: true,
+    data: {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'production'
+    }
+  })
+})
 
 // 404 handler
 app.notFound((c) => {
-  return c.json(
-    {
-      success: false,
-      error: {
-        code: "NOT_FOUND",
-        message: "Route not found",
-      },
-    },
-    404
-  );
-});
+  return c.json({
+    success: false,
+    error: {
+      code: 'NOT_FOUND',
+      message: 'Route not found'
+    }
+  }, 404)
+})
 
 // Error handler
-app.onError(errorHandler);
+app.onError((err, c) => {
+  console.error('Error occurred:', err)
+  return c.json({
+    success: false,
+    error: {
+      code: 'INTERNAL_SERVER_ERROR',
+      message: process.env.NODE_ENV === 'production' 
+        ? 'An unexpected error occurred' 
+        : err.message
+    }
+  }, 500)
+})
 
-// Start server (for local development)
-if (process.env.NODE_ENV !== "production") {
-  const port = parseInt(process.env.PORT || "8000");
-  console.log(`🚀 Server starting on http://localhost:${port}`);
-  serve({
-    fetch: app.fetch,
-    port,
-  });
-}
-
-// Export for Vercel
-export default app;
+export default app

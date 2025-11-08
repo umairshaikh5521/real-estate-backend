@@ -4,14 +4,41 @@ import { pgTable, uuid, text, varchar, timestamp, integer, decimal, jsonb, boole
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: varchar("email", { length: 255 }).notNull().unique(),
-  passwordHash: text("password_hash"),
-  name: varchar("name", { length: 255 }).notNull(),
-  role: varchar("role", { length: 50 }).notNull().default("agent"),
+  passwordHash: text("password_hash").notNull(),
+  fullName: varchar("full_name", { length: 255 }).notNull(),
   phone: varchar("phone", { length: 20 }),
+  role: varchar("role", { length: 50 }).notNull().default("channel_partner"),
   avatar: text("avatar"),
   isActive: boolean("is_active").notNull().default(true),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  verificationToken: text("verification_token"),
+  verificationTokenExpires: timestamp("verification_token_expires"),
+  resetToken: text("reset_token"),
+  resetTokenExpires: timestamp("reset_token_expires"),
+  lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Sessions table (for Better Auth)
+export const sessions = pgTable("sessions", {
+  id: text("id").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at").notNull(),
+  token: text("token").notNull().unique(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Verification tokens table (for Better Auth - email verification, password reset)
+export const verificationTokens = pgTable("verification_tokens", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(), // email or user id
+  token: text("token").notNull().unique(),
+  expires: timestamp("expires").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // Agents table (extends users)
@@ -119,6 +146,12 @@ export const activities = pgTable("activities", {
 // Export types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
+
+export type VerificationToken = typeof verificationTokens.$inferSelect;
+export type NewVerificationToken = typeof verificationTokens.$inferInsert;
 
 export type Agent = typeof agents.$inferSelect;
 export type NewAgent = typeof agents.$inferInsert;

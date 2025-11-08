@@ -5,7 +5,7 @@ node_modules
 .git
 .vscode
 .idea
-*.log
+\*.log
 coverage
 .nyc_output
 drizzle
