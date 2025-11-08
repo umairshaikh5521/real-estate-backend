@@ -8,6 +8,7 @@ import { hashPassword, verifyPassword, validatePasswordStrength } from '../lib/p
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken, generateRandomToken } from '../lib/jwt.js'
 import { UserRole } from '../types/index.js'
 import { setCookie, deleteCookie, getCookie } from 'hono/cookie'
+import { generateReferralCode } from '../lib/referralCode.js'
 
 const app = new Hono()
 
@@ -62,6 +63,21 @@ app.post('/signup', zValidator('json', signupSchema), async (c) => {
     // Hash password
     const passwordHash = await hashPassword(body.password)
     
+    // Generate referral code for channel partners
+    let referralCode: string | null = null;
+    if (body.role === UserRole.CHANNEL_PARTNER || !body.role) {
+      referralCode = generateReferralCode(body.fullName);
+      
+      // Check if code exists, regenerate if needed
+      let attempts = 0;
+      while (attempts < 5) {
+        const existing = await db.select().from(users).where(eq(users.referralCode, referralCode)).limit(1);
+        if (existing.length === 0) break;
+        referralCode = generateReferralCode(body.fullName);
+        attempts++;
+      }
+    }
+    
     // Create user
     const [newUser] = await db.insert(users).values({
       email: body.email,
@@ -69,6 +85,7 @@ app.post('/signup', zValidator('json', signupSchema), async (c) => {
       fullName: body.fullName,
       phone: body.phone || null,
       role: body.role || UserRole.CHANNEL_PARTNER,
+      referralCode,
       emailVerified: false,
       isActive: true,
     }).returning()

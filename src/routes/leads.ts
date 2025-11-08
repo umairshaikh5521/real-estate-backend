@@ -1,163 +1,209 @@
-import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
-import { db } from "../db/index.js";
-import { leads } from "../db/schema.js";
-import { eq, desc, sql } from "drizzle-orm";
-import { successResponse, errorResponse } from "../lib/response.js";
-import { requireAuth } from "../middleware/requireAuth.js";
-import { paginationSchema, calculateOffset, uuidSchema } from "../lib/validation.js";
+import { Hono } from 'hono'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
+import { db } from '../db/index.js'
+import { leads, users, agents } from '../db/schema.js'
+import { eq, desc, and } from 'drizzle-orm'
+import { requireAuth } from '../middleware/requireAuth.js'
+import { UserRole } from '../types/index.js'
 
-const app = new Hono();
+const app = new Hono()
 
 // Validation schemas
 const createLeadSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
+  name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email().optional(),
-  phone: z.string().min(10, "Phone must be at least 10 characters"),
-  status: z.string().optional(),
-  source: z.string().optional(),
-  assignedAgentId: z.string().uuid().optional().nullable(),
-  projectInterestId: z.string().uuid().optional().nullable(),
-  budget: z.string().optional().nullable(),
-  notes: z.string().optional().nullable(),
-});
+  phone: z.string().min(10, 'Valid phone number required'),
+  referralCode: z.string().optional(),
+  projectInterest: z.string().optional(),
+  budget: z.number().optional(),
+  notes: z.string().optional(),
+})
 
-const updateLeadSchema = createLeadSchema.partial();
-
-// Get all leads with pagination
-app.get(
-  "/",
-  requireAuth,
-  zValidator("query", paginationSchema),
-  async (c) => {
-    try {
-      const { page, limit } = c.req.valid("query");
-      const offset = calculateOffset(page, limit);
-
-      const [allLeads, countResult] = await Promise.all([
-        db
-          .select()
-          .from(leads)
-          .orderBy(desc(leads.createdAt))
-          .limit(limit)
-          .offset(offset),
-        db.select({ count: sql<number>`count(*)` }).from(leads),
-      ]);
-
-      const total = Number(countResult[0].count);
-
-      return successResponse(c, allLeads, 200, {
-        page,
-        limit,
-        total,
-      });
-    } catch (error) {
-      console.error("Error fetching leads:", error);
-      return errorResponse(c, "FETCH_ERROR", "Failed to fetch leads", 500);
-    }
-  }
-);
-
-// Get single lead
-app.get("/:id", requireAuth, zValidator("param", z.object({ id: uuidSchema })), async (c) => {
+// Public endpoint - Create lead from website (with referral code)
+app.post('/public', zValidator('json', createLeadSchema), async (c) => {
   try {
-    const { id } = c.req.valid("param");
-
-    const lead = await db.select().from(leads).where(eq(leads.id, id)).limit(1);
-
-    if (!lead || lead.length === 0) {
-      return errorResponse(c, "NOT_FOUND", "Lead not found", 404);
-    }
-
-    return successResponse(c, lead[0]);
-  } catch (error) {
-    console.error("Error fetching lead:", error);
-    return errorResponse(c, "FETCH_ERROR", "Failed to fetch lead", 500);
-  }
-});
-
-// Create new lead
-app.post(
-  "/",
-  requireAuth,
-  zValidator("json", createLeadSchema),
-  async (c) => {
-    try {
-      const data = c.req.valid("json");
-
-      const newLead = await db
-        .insert(leads)
-        .values({
-          ...data,
-          status: data.status || "new",
-        })
-        .returning();
-
-      return successResponse(c, newLead[0], 201);
-    } catch (error) {
-      console.error("Error creating lead:", error);
-      return errorResponse(c, "CREATE_ERROR", "Failed to create lead", 500);
-    }
-  }
-);
-
-// Update lead
-app.put(
-  "/:id",
-  requireAuth,
-  zValidator("param", z.object({ id: uuidSchema })),
-  zValidator("json", updateLeadSchema),
-  async (c) => {
-    try {
-      const { id } = c.req.valid("param");
-      const data = c.req.valid("json");
-
-      const updatedLead = await db
-        .update(leads)
-        .set({
-          ...data,
-          updatedAt: new Date(),
-        })
-        .where(eq(leads.id, id))
-        .returning();
-
-      if (!updatedLead || updatedLead.length === 0) {
-        return errorResponse(c, "NOT_FOUND", "Lead not found", 404);
+    const body = c.req.valid('json')
+    
+    let assignedAgentId = null
+    let channelPartnerId = null
+    
+    // If referral code provided, find the channel partner
+    if (body.referralCode) {
+      const [channelPartner] = await db
+        .select()
+        .from(users)
+        .where(and(
+          eq(users.referralCode, body.referralCode.toUpperCase()),
+          eq(users.role, UserRole.CHANNEL_PARTNER),
+          eq(users.isActive, true)
+        ))
+        .limit(1)
+      
+      if (!channelPartner) {
+        return c.json({
+          success: false,
+          error: {
+            code: 'INVALID_REFERRAL_CODE',
+            message: 'Invalid or inactive referral code'
+          }
+        }, 400)
       }
-
-      return successResponse(c, updatedLead[0]);
-    } catch (error) {
-      console.error("Error updating lead:", error);
-      return errorResponse(c, "UPDATE_ERROR", "Failed to update lead", 500);
-    }
-  }
-);
-
-// Delete lead
-app.delete(
-  "/:id",
-  requireAuth,
-  zValidator("param", z.object({ id: uuidSchema })),
-  async (c) => {
-    try {
-      const { id } = c.req.valid("param");
-
-      const deletedLead = await db
-        .delete(leads)
-        .where(eq(leads.id, id))
-        .returning();
-
-      if (!deletedLead || deletedLead.length === 0) {
-        return errorResponse(c, "NOT_FOUND", "Lead not found", 404);
+      
+      // Find agent record for this channel partner
+      const [agentRecord] = await db
+        .select()
+        .from(agents)
+        .where(eq(agents.userId, channelPartner.id))
+        .limit(1)
+      
+      if (agentRecord) {
+        assignedAgentId = agentRecord.id
+        channelPartnerId = channelPartner.id
       }
-
-      return successResponse(c, { message: "Lead deleted successfully" });
-    } catch (error) {
-      console.error("Error deleting lead:", error);
-      return errorResponse(c, "DELETE_ERROR", "Failed to delete lead", 500);
     }
+    
+    // Create lead
+    const [newLead] = await db.insert(leads).values({
+      name: body.name,
+      email: body.email || null,
+      phone: body.phone,
+      status: 'new',
+      source: body.referralCode ? 'referral' : 'website',
+      assignedAgentId,
+      budget: body.budget?.toString(),
+      notes: body.notes || null,
+      metadata: {
+        referralCode: body.referralCode,
+        channelPartnerId,
+        submittedFrom: 'website'
+      }
+    }).returning()
+    
+    return c.json({
+      success: true,
+      data: {
+        lead: newLead,
+        message: body.referralCode 
+          ? 'Lead submitted successfully! Your channel partner will contact you soon.'
+          : 'Lead submitted successfully! We will contact you soon.'
+      }
+    }, 201)
+    
+  } catch (error: unknown) {
+    console.error('Create lead error:', error)
+    return c.json({
+      success: false,
+      error: {
+        code: 'LEAD_CREATION_ERROR',
+        message: 'Failed to submit lead'
+      }
+    }, 500)
   }
-);
+})
 
-export default app;
+// Protected endpoint - Get leads for current user
+app.get('/', requireAuth, async (c) => {
+  try {
+    const user = c.get('user')
+    
+    // If channel partner, get their assigned leads
+    if (user.role === UserRole.CHANNEL_PARTNER) {
+      // Get agent record for this user
+      const [agentRecord] = await db
+        .select()
+        .from(agents)
+        .where(eq(agents.userId, user.id))
+        .limit(1)
+      
+      if (!agentRecord) {
+        return c.json({
+          success: true,
+          data: {
+            leads: [],
+            total: 0
+          }
+        })
+      }
+      
+      // Get leads assigned to this agent
+      const userLeads = await db
+        .select()
+        .from(leads)
+        .where(eq(leads.assignedAgentId, agentRecord.id))
+        .orderBy(desc(leads.createdAt))
+      
+      return c.json({
+        success: true,
+        data: {
+          leads: userLeads,
+          total: userLeads.length
+        }
+      })
+    }
+    
+    // Admin/Builder get all leads
+    const allLeads = await db
+      .select()
+      .from(leads)
+      .orderBy(desc(leads.createdAt))
+    
+    return c.json({
+      success: true,
+      data: {
+        leads: allLeads,
+        total: allLeads.length
+      }
+    })
+    
+  } catch (error: unknown) {
+    console.error('Get leads error:', error)
+    return c.json({
+      success: false,
+      error: {
+        code: 'FETCH_ERROR',
+        message: 'Failed to fetch leads'
+      }
+    }, 500)
+  }
+})
+
+// Get lead by ID
+app.get('/:id', requireAuth, async (c) => {
+  try {
+    const id = c.req.param('id')
+    
+    const [lead] = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.id, id))
+      .limit(1)
+    
+    if (!lead) {
+      return c.json({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Lead not found'
+        }
+      }, 404)
+    }
+    
+    return c.json({
+      success: true,
+      data: { lead }
+    })
+    
+  } catch (error: unknown) {
+    console.error('Get lead error:', error)
+    return c.json({
+      success: false,
+      error: {
+        code: 'FETCH_ERROR',
+        message: 'Failed to fetch lead'
+      }
+    }, 500)
+  }
+})
+
+export default app

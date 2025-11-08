@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { serve } from '@hono/node-server'
 import authRoutes from './routes/auth.js'
+import leadsRoutes from './routes/leads.js'
 
 const app = new Hono()
 
@@ -46,6 +47,9 @@ app.get('/api/health', (c) => {
 
 // Mount auth routes
 app.route('/api/auth', authRoutes)
+
+// Mount leads routes
+app.route('/api/leads', leadsRoutes)
 
 // 404 handler
 app.notFound((c) => {

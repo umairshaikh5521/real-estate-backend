@@ -9,6 +9,7 @@ export const users = pgTable("users", {
   phone: varchar("phone", { length: 20 }),
   role: varchar("role", { length: 50 }).notNull().default("channel_partner"),
   avatar: text("avatar"),
+  referralCode: varchar("referral_code", { length: 20 }).unique(),
   isActive: boolean("is_active").notNull().default(true),
   emailVerified: boolean("email_verified").notNull().default(false),
   verificationToken: text("verification_token"),
