@@ -287,9 +287,21 @@ app.post('/logout', async (c) => {
       await db.delete(sessions).where(eq(sessions.token, refreshToken))
     }
     
-    // Clear cookies
-    deleteCookie(c, 'accessToken', { path: '/' })
-    deleteCookie(c, 'refreshToken', { path: '/' })
+    // Clear cookies with same attributes they were set with
+    // CRITICAL: For SameSite=None cookies, must delete with same attributes
+    const isProduction = process.env.NODE_ENV === 'production'
+    
+    deleteCookie(c, 'accessToken', {
+      path: '/',
+      secure: isProduction,
+      sameSite: isProduction ? 'None' : 'Lax',
+    })
+    
+    deleteCookie(c, 'refreshToken', {
+      path: '/',
+      secure: isProduction,
+      sameSite: isProduction ? 'None' : 'Lax',
+    })
     
     return c.json({
       success: true,
