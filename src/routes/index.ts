@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import authRouter from "./auth";
-import leadsRouter from "./leads";
-import projectsRouter from "./projects";
+import authRouter from "./auth.js";
+import leadsRouter from "./leads.js";
+import projectsRouter from "./projects.js";
 
 const app = new Hono();
 

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { serve } from '@hono/node-server'
-import authRoutes from './routes/auth'
+import authRoutes from './routes/auth.js'
 
 const app = new Hono()
 

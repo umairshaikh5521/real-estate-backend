@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { db, projects } from "../db";
+import { db } from "../db/index.js";
+import { projects } from "../db/schema.js";
 import { eq, desc, sql } from "drizzle-orm";
-import { successResponse, errorResponse } from "../lib/response";
-import { authMiddleware } from "../middleware/auth";
-import { paginationSchema, calculateOffset, uuidSchema } from "../lib/validation";
+import { successResponse, errorResponse } from "../lib/response.js";
+import { requireAuth } from "../middleware/requireAuth.js";
+import { paginationSchema, calculateOffset, uuidSchema } from "../lib/validation.js";
 
 const app = new Hono();
 
@@ -29,7 +30,7 @@ const updateProjectSchema = createProjectSchema.partial();
 // Get all projects
 app.get(
   "/",
-  authMiddleware,
+  requireAuth,
   zValidator("query", paginationSchema),
   async (c) => {
     try {
@@ -61,7 +62,7 @@ app.get(
 );
 
 // Get single project
-app.get("/:id", authMiddleware, zValidator("param", z.object({ id: uuidSchema })), async (c) => {
+app.get("/:id", requireAuth, zValidator("param", z.object({ id: uuidSchema })), async (c) => {
   try {
     const { id } = c.req.valid("param");
 
@@ -85,7 +86,7 @@ app.get("/:id", authMiddleware, zValidator("param", z.object({ id: uuidSchema })
 // Create new project
 app.post(
   "/",
-  authMiddleware,
+  requireAuth,
   zValidator("json", createProjectSchema),
   async (c) => {
     try {
@@ -110,7 +111,7 @@ app.post(
 // Update project
 app.put(
   "/:id",
-  authMiddleware,
+  requireAuth,
   zValidator("param", z.object({ id: uuidSchema })),
   zValidator("json", updateProjectSchema),
   async (c) => {
@@ -142,7 +143,7 @@ app.put(
 // Delete project
 app.delete(
   "/:id",
-  authMiddleware,
+  requireAuth,
   zValidator("param", z.object({ id: uuidSchema })),
   async (c) => {
     try {

@@ -27,7 +27,7 @@ export const successResponse = <T>(
       data,
       ...(meta && { meta }),
     },
-    status
+    status as any
   );
 };
 
@@ -47,6 +47,6 @@ export const errorResponse = (
         ...(details && { details }),
       },
     },
-    status
+    status as any
   );
 };

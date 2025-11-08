@@ -1,18 +1,16 @@
 import { Context, Next } from 'hono'
-import { auth } from '../lib/auth'
-import { UserRole } from '../types'
+import { getCookie } from 'hono/cookie'
+import { verifyAccessToken } from '../lib/jwt.js'
+import { UserRole } from '../types/index.js'
+import { db } from '../db/index.js'
+import { users } from '../db/schema.js'
+import { eq } from 'drizzle-orm'
 
-/**
- * Middleware to require authentication
- * Attaches user to context if authenticated
- */
 export const requireAuth = async (c: Context, next: Next) => {
   try {
-    const session = await auth.api.getSession({
-      headers: c.req.raw.headers,
-    })
-
-    if (!session || !session.user) {
+    const accessToken = getCookie(c, 'accessToken')
+    
+    if (!accessToken) {
       return c.json({
         success: false,
         error: {
@@ -21,15 +19,39 @@ export const requireAuth = async (c: Context, next: Next) => {
         }
       }, 401)
     }
-
+    
+    const payload = verifyAccessToken(accessToken)
+    if (!payload) {
+      return c.json({
+        success: false,
+        error: {
+          code: 'INVALID_TOKEN',
+          message: 'Invalid or expired token'
+        }
+      }, 401)
+    }
+    
+    // Get user from database
+    const [user] = await db.select().from(users).where(eq(users.id, payload.userId)).limit(1)
+    
+    if (!user || !user.isActive) {
+      return c.json({
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'User not found or inactive'
+        }
+      }, 401)
+    }
+    
     // Attach user to context
     c.set('user', {
-      id: session.user.id,
-      email: session.user.email,
-      role: session.user.role as UserRole,
-      emailVerified: session.user.emailVerified || false,
+      id: user.id,
+      email: user.email,
+      role: user.role as UserRole,
+      emailVerified: user.emailVerified,
     })
-
+    
     await next()
   } catch (error) {
     console.error('Auth middleware error:', error)
@@ -43,14 +65,10 @@ export const requireAuth = async (c: Context, next: Next) => {
   }
 }
 
-/**
- * Middleware to require specific roles
- * Must be used after requireAuth middleware
- */
 export const requireRole = (allowedRoles: UserRole[]) => {
   return async (c: Context, next: Next) => {
     const user = c.get('user')
-
+    
     if (!user) {
       return c.json({
         success: false,
@@ -60,7 +78,7 @@ export const requireRole = (allowedRoles: UserRole[]) => {
         }
       }, 401)
     }
-
+    
     if (!allowedRoles.includes(user.role)) {
       return c.json({
         success: false,
@@ -70,30 +88,32 @@ export const requireRole = (allowedRoles: UserRole[]) => {
         }
       }, 403)
     }
-
+    
     await next()
   }
 }
 
-/**
- * Middleware to optionally attach user if authenticated
- * Doesn't fail if not authenticated
- */
 export const optionalAuth = async (c: Context, next: Next) => {
   try {
-    const session = await auth.api.getSession({
-      headers: c.req.raw.headers,
-    })
-
-    if (session && session.user) {
-      c.set('user', {
-        id: session.user.id,
-        email: session.user.email,
-        role: session.user.role as UserRole,
-        emailVerified: session.user.emailVerified || false,
-      })
+    const accessToken = getCookie(c, 'accessToken')
+    
+    if (accessToken) {
+      const payload = verifyAccessToken(accessToken)
+      
+      if (payload) {
+        const [user] = await db.select().from(users).where(eq(users.id, payload.userId)).limit(1)
+        
+        if (user && user.isActive) {
+          c.set('user', {
+            id: user.id,
+            email: user.email,
+            role: user.role as UserRole,
+            emailVerified: user.emailVerified,
+          })
+        }
+      }
     }
-
+    
     await next()
   } catch (error) {
     // Silently continue if auth fails

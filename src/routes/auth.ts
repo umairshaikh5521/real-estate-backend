@@ -1,12 +1,12 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { db } from '../db'
-import { users, sessions } from '../db/schema'
+import { db } from '../db/index.js'
+import { users, sessions } from '../db/schema.js'
 import { eq } from 'drizzle-orm'
-import { hashPassword, verifyPassword, validatePasswordStrength } from '../lib/password'
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken, generateRandomToken } from '../lib/jwt'
-import { UserRole } from '../types'
+import { hashPassword, verifyPassword, validatePasswordStrength } from '../lib/password.js'
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken, generateRandomToken } from '../lib/jwt.js'
+import { UserRole } from '../types/index.js'
 import { setCookie, deleteCookie, getCookie } from 'hono/cookie'
 
 const app = new Hono()
