@@ -5,9 +5,18 @@ import { db } from '../db/index.js'
 import { leads, users, agents } from '../db/schema.js'
 import { eq, desc, and } from 'drizzle-orm'
 import { requireAuth } from '../middleware/requireAuth.js'
-import { UserRole } from '../types/index.js'
+import { UserRole, type AppContext } from '../types/index.js'
 
-const app = new Hono()
+type Variables = {
+  user?: {
+    id: string;
+    email: string;
+    role: UserRole;
+    emailVerified: boolean;
+  };
+}
+
+const app = new Hono<{ Variables: Variables }>()
 
 // Validation schemas
 const createLeadSchema = z.object({
@@ -106,6 +115,16 @@ app.post('/public', zValidator('json', createLeadSchema), async (c) => {
 app.get('/', requireAuth, async (c) => {
   try {
     const user = c.get('user')
+    
+    if (!user) {
+      return c.json({
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'User not found in context'
+        }
+      }, 401)
+    }
     
     // If channel partner, get their assigned leads
     if (user.role === UserRole.CHANNEL_PARTNER) {
