@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/index.js'
-import { users, sessions, agents } from '../db/schema.js'
+import { users, sessions, channelPartners } from '../db/schema.js'
 import { eq, and } from 'drizzle-orm'
 import { hashPassword, verifyPassword, validatePasswordStrength } from '../lib/password.js'
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken, generateRandomToken } from '../lib/jwt.js'
@@ -111,9 +111,9 @@ app.post('/signup', zValidator('json', signupSchema), async (c) => {
       isActive: true,
     }).returning()
     
-    // Auto-create agent record for channel partners
+    // Auto-create channel partner record
     if ((body.role || UserRole.CHANNEL_PARTNER) === UserRole.CHANNEL_PARTNER) {
-      await db.insert(agents).values({
+      await db.insert(channelPartners).values({
         userId: newUser.id,
         status: 'active',
         performanceMetrics: null,

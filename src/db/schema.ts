@@ -42,8 +42,8 @@ export const verificationTokens = pgTable("verification_tokens", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// Agents table (extends users)
-export const agents = pgTable("agents", {
+// Channel Partners table (extends users)
+export const channelPartners = pgTable("channel_partners", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   status: varchar("status", { length: 50 }).notNull().default("active"),
@@ -93,7 +93,7 @@ export const leads = pgTable("leads", {
   phone: varchar("phone", { length: 20 }).notNull(),
   status: varchar("status", { length: 50 }).notNull().default("new"),
   source: varchar("source", { length: 100 }),
-  assignedAgentId: uuid("assigned_agent_id").references(() => agents.id),
+  assignedChannelPartnerId: uuid("assigned_channel_partner_id").references(() => channelPartners.id),
   projectInterestId: uuid("project_interest_id").references(() => projects.id),
   budget: decimal("budget", { precision: 15, scale: 2 }),
   notes: text("notes"),
@@ -108,7 +108,7 @@ export const bookings = pgTable("bookings", {
   leadId: uuid("lead_id").notNull().references(() => leads.id),
   projectId: uuid("project_id").notNull().references(() => projects.id),
   unitId: uuid("unit_id").notNull().references(() => units.id),
-  agentId: uuid("agent_id").notNull().references(() => agents.id),
+  channelPartnerId: uuid("channel_partner_id").notNull().references(() => channelPartners.id),
   bookingAmount: decimal("booking_amount", { precision: 15, scale: 2 }).notNull(),
   totalAmount: decimal("total_amount", { precision: 15, scale: 2 }).notNull(),
   paymentSchedule: jsonb("payment_schedule"),
@@ -154,8 +154,8 @@ export type NewSession = typeof sessions.$inferInsert;
 export type VerificationToken = typeof verificationTokens.$inferSelect;
 export type NewVerificationToken = typeof verificationTokens.$inferInsert;
 
-export type Agent = typeof agents.$inferSelect;
-export type NewAgent = typeof agents.$inferInsert;
+export type ChannelPartner = typeof channelPartners.$inferSelect;
+export type NewChannelPartner = typeof channelPartners.$inferInsert;
 
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;

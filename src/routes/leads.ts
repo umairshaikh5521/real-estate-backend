@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/index.js'
-import { leads, users, agents } from '../db/schema.js'
+import { leads, users, channelPartners } from '../db/schema.js'
 import { eq, desc, and } from 'drizzle-orm'
 import { requireAuth } from '../middleware/requireAuth.js'
 import { UserRole, type AppContext } from '../types/index.js'
@@ -34,12 +34,12 @@ app.post('/public', zValidator('json', createLeadSchema), async (c) => {
   try {
     const body = c.req.valid('json')
     
-    let assignedAgentId = null
-    let channelPartnerId = null
+    let assignedChannelPartnerId = null
+    let channelPartnerUserId = null
     
     // If referral code provided, find the channel partner
     if (body.referralCode) {
-      const [channelPartner] = await db
+      const [channelPartnerUser] = await db
         .select()
         .from(users)
         .where(and(
@@ -49,7 +49,7 @@ app.post('/public', zValidator('json', createLeadSchema), async (c) => {
         ))
         .limit(1)
       
-      if (!channelPartner) {
+      if (!channelPartnerUser) {
         return c.json({
           success: false,
           error: {
@@ -59,16 +59,16 @@ app.post('/public', zValidator('json', createLeadSchema), async (c) => {
         }, 400)
       }
       
-      // Find agent record for this channel partner
-      const [agentRecord] = await db
+      // Find channel partner record
+      const [channelPartnerRecord] = await db
         .select()
-        .from(agents)
-        .where(eq(agents.userId, channelPartner.id))
+        .from(channelPartners)
+        .where(eq(channelPartners.userId, channelPartnerUser.id))
         .limit(1)
       
-      if (agentRecord) {
-        assignedAgentId = agentRecord.id
-        channelPartnerId = channelPartner.id
+      if (channelPartnerRecord) {
+        assignedChannelPartnerId = channelPartnerRecord.id
+        channelPartnerUserId = channelPartnerUser.id
       }
     }
     
@@ -79,12 +79,12 @@ app.post('/public', zValidator('json', createLeadSchema), async (c) => {
       phone: body.phone,
       status: 'new',
       source: body.referralCode ? 'referral' : 'website',
-      assignedAgentId: assignedAgentId || null,
+      assignedChannelPartnerId: assignedChannelPartnerId || null,
       budget: body.budget?.toString() || null,
       notes: body.notes || null,
-      metadata: body.referralCode || channelPartnerId ? {
+      metadata: body.referralCode || channelPartnerUserId ? {
         referralCode: body.referralCode || undefined,
-        channelPartnerId: channelPartnerId || undefined,
+        channelPartnerUserId: channelPartnerUserId || undefined,
         submittedFrom: 'website'
       } : null
     }).returning()
@@ -132,14 +132,14 @@ app.get('/', requireAuth, async (c) => {
     
     // If channel partner, get their assigned leads
     if (user.role === UserRole.CHANNEL_PARTNER) {
-      // Get agent record for this user
-      const [agentRecord] = await db
+      // Get channel partner record for this user
+      const [channelPartnerRecord] = await db
         .select()
-        .from(agents)
-        .where(eq(agents.userId, user.id))
+        .from(channelPartners)
+        .where(eq(channelPartners.userId, user.id))
         .limit(1)
       
-      if (!agentRecord) {
+      if (!channelPartnerRecord) {
         return c.json({
           success: true,
           data: {
@@ -149,11 +149,11 @@ app.get('/', requireAuth, async (c) => {
         })
       }
       
-      // Get leads assigned to this agent
+      // Get leads assigned to this channel partner
       const userLeads = await db
         .select()
         .from(leads)
-        .where(eq(leads.assignedAgentId, agentRecord.id))
+        .where(eq(leads.assignedChannelPartnerId, channelPartnerRecord.id))
         .orderBy(desc(leads.createdAt))
       
       return c.json({
