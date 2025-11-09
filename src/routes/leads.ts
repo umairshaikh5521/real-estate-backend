@@ -79,14 +79,14 @@ app.post('/public', zValidator('json', createLeadSchema), async (c) => {
       phone: body.phone,
       status: 'new',
       source: body.referralCode ? 'referral' : 'website',
-      assignedAgentId,
-      budget: body.budget?.toString(),
+      assignedAgentId: assignedAgentId || null,
+      budget: body.budget?.toString() || null,
       notes: body.notes || null,
-      metadata: {
-        referralCode: body.referralCode,
-        channelPartnerId,
+      metadata: body.referralCode || channelPartnerId ? {
+        referralCode: body.referralCode || undefined,
+        channelPartnerId: channelPartnerId || undefined,
         submittedFrom: 'website'
-      }
+      } : null
     }).returning()
     
     return c.json({
@@ -101,11 +101,15 @@ app.post('/public', zValidator('json', createLeadSchema), async (c) => {
     
   } catch (error: unknown) {
     console.error('Create lead error:', error)
+    
+    // Provide more detailed error message
+    const errorMessage = error instanceof Error ? error.message : 'Failed to submit lead';
+    
     return c.json({
       success: false,
       error: {
         code: 'LEAD_CREATION_ERROR',
-        message: 'Failed to submit lead'
+        message: errorMessage
       }
     }, 500)
   }
