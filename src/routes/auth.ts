@@ -280,6 +280,7 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
           phone: user.phone,
           role: user.role,
           emailVerified: user.emailVerified,
+          referralCode: user.referralCode,
         },
         accessToken,
         message: 'Login successful'
@@ -392,6 +393,7 @@ app.get('/session', async (c) => {
           phone: user.phone,
           role: user.role,
           emailVerified: user.emailVerified,
+          referralCode: user.referralCode,
         }
       }
     })
