@@ -5,7 +5,7 @@ import { db } from '../db/index.js'
 import { users, sessions, channelPartners } from '../db/schema.js'
 import { eq, and } from 'drizzle-orm'
 import { hashPassword, verifyPassword, validatePasswordStrength } from '../lib/password.js'
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken, generateRandomToken } from '../lib/jwt.js'
+import { generateAccessToken, generateRefreshToken, verifyAccessToken, verifyRefreshToken, generateRandomToken } from '../lib/jwt.js'
 import { UserRole } from '../types/index.js'
 import { setCookie, deleteCookie, getCookie } from 'hono/cookie'
 import { generateReferralCode } from '../lib/referralCode.js'
@@ -368,7 +368,7 @@ app.get('/session', async (c) => {
       }, 401)
     }
     
-    const payload = verifyRefreshToken(accessToken)
+    const payload = verifyAccessToken(accessToken)
     if (!payload) {
       return c.json({
         success: false,
