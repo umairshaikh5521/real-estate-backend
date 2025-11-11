@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/index.js'
-import { leads, users, channelPartners } from '../db/schema.js'
+import { leads, users, channelPartners, followUps, activities } from '../db/schema.js'
 import { eq, desc, and } from 'drizzle-orm'
 import { requireAuth } from '../middleware/requireAuth.js'
 import { UserRole, type AppContext } from '../types/index.js'
@@ -27,6 +27,22 @@ const createLeadSchema = z.object({
   projectInterest: z.string().optional(),
   budget: z.number().optional(),
   notes: z.string().optional(),
+})
+
+const updateLeadSchema = z.object({
+  name: z.string().min(2).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().min(10).optional(),
+  status: z.enum(['new', 'contacted', 'qualified', 'site_visit', 'negotiation', 'converted', 'lost']).optional(),
+  budget: z.string().optional(),
+  notes: z.string().optional(),
+})
+
+const createFollowUpSchema = z.object({
+  scheduledAt: z.string(), // ISO date string
+  type: z.enum(['call', 'meeting', 'email', 'whatsapp']),
+  notes: z.string().optional(),
+  reminder: z.boolean().optional(),
 })
 
 // Public endpoint - Create lead from website (with referral code)
@@ -224,6 +240,303 @@ app.get('/:id', requireAuth, async (c) => {
       error: {
         code: 'FETCH_ERROR',
         message: 'Failed to fetch lead'
+      }
+    }, 500)
+  }
+})
+
+// Update lead
+app.put('/:id', requireAuth, zValidator('json', updateLeadSchema), async (c) => {
+  try {
+    const id = c.req.param('id')
+    const user = c.get('user')
+    const body = c.req.valid('json')
+    
+    if (!user) {
+      return c.json({
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'User not found'
+        }
+      }, 401)
+    }
+    
+    // Check if lead exists
+    const [existingLead] = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.id, id))
+      .limit(1)
+    
+    if (!existingLead) {
+      return c.json({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Lead not found'
+        }
+      }, 404)
+    }
+    
+    // Track what changed for activity log
+    const changes: string[] = []
+    if (body.status && body.status !== existingLead.status) {
+      changes.push(`Status changed from ${existingLead.status} to ${body.status}`)
+    }
+    if (body.notes && body.notes !== existingLead.notes) {
+      changes.push('Notes updated')
+    }
+    
+    // Update lead
+    const [updatedLead] = await db
+      .update(leads)
+      .set({
+        ...body,
+        updatedAt: new Date()
+      })
+      .where(eq(leads.id, id))
+      .returning()
+    
+    // Log activity
+    if (changes.length > 0) {
+      await db.insert(activities).values({
+        entityType: 'lead',
+        entityId: id,
+        userId: user.id,
+        activityType: 'lead_updated',
+        description: changes.join(', '),
+        metadata: { changes: body }
+      })
+    }
+    
+    return c.json({
+      success: true,
+      data: {
+        lead: updatedLead,
+        message: 'Lead updated successfully'
+      }
+    })
+    
+  } catch (error: unknown) {
+    console.error('Update lead error:', error)
+    return c.json({
+      success: false,
+      error: {
+        code: 'UPDATE_ERROR',
+        message: 'Failed to update lead'
+      }
+    }, 500)
+  }
+})
+
+// Create follow-up for a lead
+app.post('/:id/follow-ups', requireAuth, zValidator('json', createFollowUpSchema), async (c) => {
+  try {
+    const leadId = c.req.param('id')
+    const user = c.get('user')
+    const body = c.req.valid('json')
+    
+    if (!user) {
+      return c.json({
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'User not found'
+        }
+      }, 401)
+    }
+    
+    // Check if lead exists
+    const [lead] = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.id, leadId))
+      .limit(1)
+    
+    if (!lead) {
+      return c.json({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Lead not found'
+        }
+      }, 404)
+    }
+    
+    // Create follow-up
+    const [newFollowUp] = await db.insert(followUps).values({
+      leadId,
+      userId: user.id,
+      scheduledAt: new Date(body.scheduledAt),
+      type: body.type,
+      notes: body.notes || null,
+      reminder: body.reminder !== false,
+      status: 'pending'
+    }).returning()
+    
+    // Log activity
+    await db.insert(activities).values({
+      entityType: 'lead',
+      entityId: leadId,
+      userId: user.id,
+      activityType: 'follow_up_scheduled',
+      description: `Follow-up ${body.type} scheduled for ${new Date(body.scheduledAt).toLocaleString()}`,
+      metadata: { followUpId: newFollowUp.id, type: body.type }
+    })
+    
+    return c.json({
+      success: true,
+      data: {
+        followUp: newFollowUp,
+        message: 'Follow-up scheduled successfully'
+      }
+    }, 201)
+    
+  } catch (error: unknown) {
+    console.error('Create follow-up error:', error)
+    return c.json({
+      success: false,
+      error: {
+        code: 'FOLLOW_UP_ERROR',
+        message: 'Failed to create follow-up'
+      }
+    }, 500)
+  }
+})
+
+// Get follow-ups for a lead
+app.get('/:id/follow-ups', requireAuth, async (c) => {
+  try {
+    const leadId = c.req.param('id')
+    
+    const leadFollowUps = await db
+      .select()
+      .from(followUps)
+      .where(eq(followUps.leadId, leadId))
+      .orderBy(desc(followUps.scheduledAt))
+    
+    return c.json({
+      success: true,
+      data: {
+        followUps: leadFollowUps,
+        total: leadFollowUps.length
+      }
+    })
+    
+  } catch (error: unknown) {
+    console.error('Get follow-ups error:', error)
+    return c.json({
+      success: false,
+      error: {
+        code: 'FETCH_ERROR',
+        message: 'Failed to fetch follow-ups'
+      }
+    }, 500)
+  }
+})
+
+// Update follow-up (mark as complete)
+app.put('/follow-ups/:id', requireAuth, async (c) => {
+  try {
+    const id = c.req.param('id')
+    const user = c.get('user')
+    const body = await c.req.json()
+    
+    if (!user) {
+      return c.json({
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'User not found'
+        }
+      }, 401)
+    }
+    
+    const [updatedFollowUp] = await db
+      .update(followUps)
+      .set({
+        status: body.status || 'completed',
+        completedAt: new Date(),
+        notes: body.notes || undefined,
+        updatedAt: new Date()
+      })
+      .where(eq(followUps.id, id))
+      .returning()
+    
+    // Log activity
+    if (updatedFollowUp) {
+      await db.insert(activities).values({
+        entityType: 'lead',
+        entityId: updatedFollowUp.leadId,
+        userId: user.id,
+        activityType: 'follow_up_completed',
+        description: `Follow-up ${updatedFollowUp.type} completed`,
+        metadata: { followUpId: updatedFollowUp.id }
+      })
+    }
+    
+    return c.json({
+      success: true,
+      data: {
+        followUp: updatedFollowUp,
+        message: 'Follow-up updated successfully'
+      }
+    })
+    
+  } catch (error: unknown) {
+    console.error('Update follow-up error:', error)
+    return c.json({
+      success: false,
+      error: {
+        code: 'UPDATE_ERROR',
+        message: 'Failed to update follow-up'
+      }
+    }, 500)
+  }
+})
+
+// Get activities for a lead
+app.get('/:id/activities', requireAuth, async (c) => {
+  try {
+    const leadId = c.req.param('id')
+    
+    const leadActivities = await db
+      .select({
+        id: activities.id,
+        activityType: activities.activityType,
+        description: activities.description,
+        metadata: activities.metadata,
+        createdAt: activities.createdAt,
+        user: {
+          id: users.id,
+          fullName: users.fullName,
+          email: users.email
+        }
+      })
+      .from(activities)
+      .leftJoin(users, eq(activities.userId, users.id))
+      .where(and(
+        eq(activities.entityType, 'lead'),
+        eq(activities.entityId, leadId)
+      ))
+      .orderBy(desc(activities.createdAt))
+    
+    return c.json({
+      success: true,
+      data: {
+        activities: leadActivities,
+        total: leadActivities.length
+      }
+    })
+    
+  } catch (error: unknown) {
+    console.error('Get activities error:', error)
+    return c.json({
+      success: false,
+      error: {
+        code: 'FETCH_ERROR',
+        message: 'Failed to fetch activities'
       }
     }, 500)
   }

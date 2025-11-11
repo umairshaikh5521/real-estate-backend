@@ -144,6 +144,21 @@ export const activities = pgTable("activities", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Follow-ups table
+export const followUps = pgTable("follow_ups", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leadId: uuid("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  scheduledAt: timestamp("scheduled_at").notNull(),
+  completedAt: timestamp("completed_at"),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  type: varchar("type", { length: 50 }).notNull(), // call, meeting, email, whatsapp
+  notes: text("notes"),
+  reminder: boolean("reminder").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Export types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -174,3 +189,6 @@ export type NewPayment = typeof payments.$inferInsert;
 
 export type Activity = typeof activities.$inferSelect;
 export type NewActivity = typeof activities.$inferInsert;
+
+export type FollowUp = typeof followUps.$inferSelect;
+export type NewFollowUp = typeof followUps.$inferInsert;

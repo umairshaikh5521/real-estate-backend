@@ -4,6 +4,7 @@ import { logger } from 'hono/logger'
 import { serve } from '@hono/node-server'
 import authRoutes from './routes/auth.js'
 import leadsRoutes from './routes/leads.js'
+import projectsRoutes from './routes/projects.js'
 
 const app = new Hono()
 
@@ -26,8 +27,8 @@ app.get('/', (c) => {
       endpoints: {
         health: '/api/health',
         auth: '/api/auth/*',
-        leads: '/api/leads (coming soon)',
-        projects: '/api/projects (coming soon)',
+        leads: '/api/leads',
+        projects: '/api/projects',
       }
     }
   })
@@ -50,6 +51,9 @@ app.route('/api/auth', authRoutes)
 
 // Mount leads routes
 app.route('/api/leads', leadsRoutes)
+
+// Mount projects routes
+app.route('/api/projects', projectsRoutes)
 
 // 404 handler
 app.notFound((c) => {
